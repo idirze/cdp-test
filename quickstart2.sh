@@ -19,10 +19,9 @@ log_info (){
 
 ANSIBLE_COLLECTIONS_PATH="/opt/cldr-runner/collections"
 ANSIBLE_ROLES_PATH="/opt/cldr-runner/roles"
+CONTAINER_HOME_DIR="/home/runner"
 # The playbooks are mounted there
-CONTAINER_PROJECT_DIR="/home/runner/project"
-# Mount the profiles there
-CDP_PROFILE_DIR="${CONTAINER_PROJECT_DIR%/*}"
+CONTAINER_PROJECT_DIR="${CONTAINER_HOME_DIR}/project"
 
 log_info "Checking if Docker is running..."
 { docker info >/dev/null 2>&1; echo "Docker OK"; } || { echo "Docker is required and does not seem to be running - please start Docker and retry" ; exit 1; }
@@ -34,16 +33,6 @@ for thisdir in  ".ssh" ".cdp" "cloudera-deploy/log" ".config/cloudera-deploy/pro
 do
   mkdir -p "${PROJECT_DIR}"/$thisdir
 done
-
-log_info "Ensure Default profile is present"
-if [ ! -f "${PROJECT_DIR}"/.config/cloudera-deploy/profiles/default ]; then
-  if [ ! -f "${DIR}/profile.yml" ]; then
-    curl "https://raw.githubusercontent.com/cloudera-labs/cloudera-deploy/main/profile.yml" -o "${PROJECT_DIR}"/.config/cloudera-deploy/profiles/default
-  else
-    cp "${DIR}/profile.yml" "${PROJECT_DIR}"/.config/cloudera-deploy/profiles/default
-  fi
-fi
-
 
 log_info "Mounting ${PROJECT_DIR} to container as Project Directory /runner/project"
 log_info "Creating Container ${CONTAINER_NAME} from image ${IMAGE_FULL_NAME}"
@@ -60,7 +49,7 @@ if [ ! "$(docker ps -q -f name=${CONTAINER_NAME})" ]; then
       --detach-keys="ctrl-@" \
       -v "${PROJECT_DIR}":"${CONTAINER_PROJECT_DIR}" \
       -v "$HOME/.ssh":"$HOME/.ssh" \
-      -e ANSIBLE_LOG_PATH="${CDP_PROFILE_DIR}/cloudera-deploy/log/${CONTAINER_NAME}-$(date +%F_%H%M%S)" \
+      -e ANSIBLE_LOG_PATH="${CONTAINER_HOME_DIR}/cloudera-deploy/log/${CONTAINER_NAME}-$(date +%F_%H%M%S)" \
       -e ANSIBLE_INVENTORY="inventory" \
       -e ANSIBLE_CALLBACK_WHITELIST="ansible.posix.profile_tasks" \
       -e ANSIBLE_GATHERING="smart" \
@@ -69,9 +58,8 @@ if [ ! "$(docker ps -q -f name=${CONTAINER_NAME})" ]; then
       -e ANSIBLE_SSH_RETRIES=10 \
       -e ANSIBLE_COLLECTIONS_PATH="${ANSIBLE_COLLECTIONS_PATH}" \
       -e ANSIBLE_ROLES_PATH="${ANSIBLE_ROLES_PATH}" \
-      --mount "type=bind,source=${PROJECT_DIR}/.config,target=${CDP_PROFILE_DIR}/.config" \
-      --mount "type=bind,source=${PROJECT_DIR}/.ssh,target=${CDP_PROFILE_DIR}/.ssh" \
-      --mount "type=bind,source=${PROJECT_DIR}/.cdp,target=${CDP_PROFILE_DIR}/.cdp" \
+      --mount "type=bind,source=${PROJECT_DIR}/.config,target=${CONTAINER_HOME_DIR}/.config" \
+      --mount "type=bind,source=${PROJECT_DIR}/.cdp,target=${CONTAINER_HOME_DIR}/.cdp" \
       --network="host" \
       --name "${CONTAINER_NAME}" \
       "${IMAGE_FULL_NAME}" \
